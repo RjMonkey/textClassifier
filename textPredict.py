@@ -32,8 +32,6 @@ from keras.engine.topology import Layer, InputSpec
 from keras import initializers
 
 
-# KTF.set_session(tf.Session(config=tf.ConfigProto(device_count={'gpu': 0})))
-
 
 MAX_SENT_LENGTH = 600
 MAX_SENTS = 25
@@ -57,92 +55,13 @@ def clean_str(string):
     return string.strip().lower()
 
 
-data_train = pd.read_csv('./document/fine.tsv', sep='\t')
-
-
-print data_train.shape
-
-
-
-reviews = []
-labels = []
-texts = []
-
-
-for idx in range(data_train.review.shape[0]):
-    text = BeautifulSoup(data_train.review[idx])
-    text = clean_str(text.get_text().encode('ascii', 'ignore'))
-    texts.append(text)
-    sentences = tokenize.sent_tokenize(text)
-    reviews.append(sentences)
-
-    labels.append(data_train.sentiment[idx])
-
-
 tokenizer = Tokenizer(nb_words=MAX_NB_WORDS)
-
-tokenizer.fit_on_texts(texts)
-
-
-data = np.zeros((len(texts), MAX_SENTS, MAX_SENT_LENGTH), dtype='int32')
-
-
-for i, sentences in enumerate(reviews):
-    for j, sent in enumerate(sentences):
-        if j < MAX_SENTS:
-            wordTokens = text_to_word_sequence(sent)
-            k = 0
-            for _, word in enumerate(wordTokens):
-                if k < MAX_SENT_LENGTH and tokenizer.word_index[word] < MAX_NB_WORDS:
-                    data[i, j, k] = tokenizer.word_index[word]
-                    k = k + 1
-
-
 
 word_index = tokenizer.word_index
 
-print('Total %s unique tokens.' % len(word_index))
+# genrate model
 
-
-labels = to_categorical(np.asarray(labels))
-print('Shape of data tensor:', data.shape)
-print('Shape of label tensor:', labels.shape)
-
-indices = np.arange(data.shape[0])
-
-
-np.random.shuffle(indices)
-
-data = data[indices]
-
-labels = labels[indices]
-nb_validation_samples = int(VALIDATION_SPLIT * data.shape[0])
-
-
-x_train = data[:-nb_validation_samples]
-y_train = labels[:-nb_validation_samples]
-
-x_val = data[-nb_validation_samples:]
-y_val = labels[-nb_validation_samples:]
-
-print('Number of positive and negative reviews in traing and validation set')
-print y_train.sum(axis=0)
-print y_val.sum(axis=0)
-
-
-# embedding
-
-# GLOVE_DIR = "."
-# embeddings_index = {}
-# f = open(os.path.join(GLOVE_DIR, 'glove.6B.100d.txt'))
-# for line in f:
-#     values = line.split()
-#     word = values[0]
-#     coefs = np.asarray(values[1:], dtype='float32')
-#     embeddings_index[word] = coefs
-# f.close()
-
-EMBEDDING_DIR = "/home/rjmonster/textClassifier/word_embedding"
+EMBEDDING_DIR = "~/textClassifier/word_embedding"
 embeddings_index = {}
 f = open(os.path.join(EMBEDDING_DIR, 'fasttext_embedding.vec'))
 
@@ -234,40 +153,12 @@ l_att_sent = AttLayer(100)(l_lstm_sent)
 preds = Dense(10, activation='softmax')(l_att_sent)
 model = Model(review_input, preds)
 
+file=h5py.File("./zhaobaiyang_model_weight", 'r')
+weight = []
+for i in range(len(file.keys())):
+    weight.append(file['weight'+str(i)][:])
+model.set_weights(weight)
 
-model.compile(loss='categorical_crossentropy',
-              optimizer='rmsprop',
-              metrics=['acc'])
-print("model fitting - Hierachical attention network")
-model.fit(x_train, y_train, validation_data=(x_val, y_val),
-          epochs=10, batch_size=50)
-
-
-# save the weight maybe it can success
-# file = h5py.File("classfication_model_weight.h5", "w")
-# weight = model.get_weights()
-# for i in range(len(weight)):
-#     file.create_dataset('weight' + str(i), data=weight[i])
-# file.close()
-
-# '''
-# # save the weight maybe it can success
-# file = h5py.File("classification.h5", "w")
-# weight = model.get_weights()
-# for i in range(len(weight)):
-#     file.create_dataset('weight' + str(i), data=weight[i])
-# file.close()
-#
-# '''
-# '''
-# file=h5py.File("./zhaobaiyang_model_weight", 'r')
-# weight = []
-# for i in range(len(file.keys())):
-#     weight.append(file['weight'+str(i)][:])
-# model.set_weights(weight)
-
-# '''
-# For predict
 for root, dirs, files in os.walk("/home/rjmonster/textClassifier/data/"):
     for file_i in files:
 
@@ -297,11 +188,7 @@ for root, dirs, files in os.walk("/home/rjmonster/textClassifier/data/"):
                             data_2[i, j, k] = tokenizer_predict.word_index[word]
                             k = k + 1
 
-        # word_index_predict = tokenizer_predict.word_index
-        # print('Total %s unique predict tokens.' % len(word_index_predict))
-        # indices_predict = np.arangde(data_2.shape[0])
-        # np.random.shuffle(indices_predict)
-        # data_2 = data_2[indices_predict]
+
 
         predict = model.predict(data_2, batch_size=50)
         # classes = predict.argmax(axis=-1)
@@ -316,5 +203,3 @@ for root, dirs, files in os.walk("/home/rjmonster/textClassifier/data/"):
         with open('./predict_result/'+str(file_i)+'.csv', 'w') as csvfile:
             writer = csv.writer(csvfile)
             writer.writerows(result)
-
-
